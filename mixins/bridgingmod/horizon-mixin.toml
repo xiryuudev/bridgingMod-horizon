@@ -1,0 +1,127 @@
+# BridgingMod for Horizon: reach-around placement ("bridge assist").
+#
+# The commit it was tested on. Besides Horizon's native hook points it hooks
+# two functions that are not hook points: the client's `remote_use`
+# (`Minecraft.startUseItem`) and `native_world_primitives` for the debug box.
+# A port of squeeglii's BridgingMod (MIT), rewritten in Rust for Horizon.
+[mod]
+id = "bridgingmod"
+version = "1.0.0"
+priority = 100
+
+[compatibility]
+horizon_revision = "fdc87aecdbd116bf1e08adcd062fcbaea8c2e2ca"
+
+[[module]]
+id = "runtime"
+file = "crates/horizon-client/src/game.rs"
+name = "bridgingmod"
+source = "runtime.rs"
+
+# --- Horizon's native hook points ---
+
+[[injection]]
+id = "frame"
+hook = "frame"
+hook_version = 1
+kind = "HEAD"
+helper = "frame.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+]
+
+[[injection]]
+id = "key"
+hook = "key"
+hook_version = 1
+kind = "HEAD"
+helper = "key.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "key", ty = "&str", value = "key" },
+  { name = "pressed", ty = "bool", value = "pressed" },
+]
+
+[[injection]]
+id = "list"
+hook = "mods"
+hook_version = 1
+kind = "HEAD"
+helper = "list.rs"
+bindings = [
+  { name = "mods", ty = "&mut Vec<crate::game::native_hooks::NativeMod>", value = "&mut *mods" },
+]
+
+[[injection]]
+id = "settings"
+hook = "settings"
+hook_version = 1
+kind = "HEAD"
+helper = "settings.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "mod_id", ty = "&str", value = "mod_id" },
+  { name = "buttons", ty = "&mut Vec<String>", value = "&mut *buttons" },
+]
+
+[[injection]]
+id = "settings-click"
+hook = "settings_click"
+hook_version = 1
+kind = "HEAD"
+helper = "settings_click.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "mod_id", ty = "&str", value = "mod_id" },
+  { name = "button", ty = "usize", value = "button" },
+]
+
+[[injection]]
+id = "crosshair"
+hook = "gui_layer_post"
+hook_version = 1
+kind = "HEAD"
+helper = "crosshair.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "layer", ty = "&str", value = "layer" },
+  { name = "batch", ty = "&mut horizon_client::hud::HudBatch", value = "&mut *batch" },
+]
+
+# --- The two functions that are not hook points ---
+
+# `Minecraft.startUseItem`: when the crosshair hits nothing and a bridge
+# target exists, hand the game a synthetic block hit for this one use.
+[[injection]]
+id = "use"
+target = "horizon_client::game::remote::Game<'_>::remote_use"
+kind = "HEAD"
+helper = "use.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+]
+
+# The end of that use, on its own return and every early one: put the
+# crosshair back and apply the configured delay.
+[[injection]]
+id = "use-restore"
+target = "horizon_client::game::remote::Game<'_>::remote_use"
+kind = "RETURN"
+helper = "use_restore.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "value", ty = "()", value = "$value" },
+]
+
+# The debug box at the target position (`LevelRenderer.submitBlockOutline`).
+[[injection]]
+id = "outline"
+target = "horizon_client::game::native_hooks::Game<'_>::native_world_primitives"
+kind = "HEAD"
+helper = "outline.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "partial", ty = "f32", value = "partial" },
+  { name = "camera", ty = "[f64; 3]", value = "camera" },
+  { name = "primitives", ty = "&mut horizon_client::world_primitives::WorldPrimitives", value = "&mut *primitives" },
+]

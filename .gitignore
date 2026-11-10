@@ -1,0 +1,3 @@
+# Nothing to build here: the launcher stages the bundle and compiles the game.
+/target/
+*.hnmod
