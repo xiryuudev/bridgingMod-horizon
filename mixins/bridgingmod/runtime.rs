@@ -17,7 +17,7 @@ use std::cell::RefCell;
 /// The mod's id: its settings folder and its key's line.
 pub const ID: &str = "bridgingmod";
 pub const NAME: &str = "BridgingMod";
-pub const VERSION: &str = "1.0.0";
+pub const VERSION: &str = "1.0.1";
 pub const DESCRIPTION: &str =
     "Reach-around placement: place blocks in reach-around gaps, with a direction indicator and F3 box.";
 /// The toggle key's name, and its default (upstream's comma).
@@ -26,6 +26,21 @@ pub const DEFAULT_KEY: &str = "key.keyboard.comma";
 /// Said in the action bar when the toggle key turns it on or off.
 pub const ON: &str = "Bridging assist: ON";
 pub const OFF: &str = "Bridging assist: OFF";
+
+/// The name of "no key" (`options.txt`'s `key_key.unknown`): a mod key the
+/// player cleared never matches a real event.
+pub const UNBOUND_KEY: &str = "key.keyboard.unknown";
+
+/// Whether the toggle key acts: `pressed` on the key the player bound to the
+/// mod, or on the mod's own default until they change it.
+///
+/// `native_mod_key` answers the default when the player has set no override,
+/// so a fresh install hands the default back here: refusing the default would
+/// leave the toggle dead until the player rebound it. An unbound or empty key
+/// never acts.
+pub fn toggles_on(bound: &str, key: &str, pressed: bool) -> bool {
+    pressed && !bound.is_empty() && bound != UNBOUND_KEY && bound == key
+}
 
 /// `Path.NEAR_ZERO`.
 pub const NEAR_ZERO: f64 = 0.01;
@@ -1345,6 +1360,26 @@ mod tests {
         .expect("an assist beside the wall");
         assert!(valid_assist_sides([0.0, 0.0, -1.0]).contains(&assist.side));
         assert!(world.solid.contains(&assist.pos.offset(assist.side)));
+    }
+
+    #[test]
+    fn default_key_toggles() {
+        // A fresh install: `native_mod_key` answers the default, which must act.
+        assert!(toggles_on(DEFAULT_KEY, DEFAULT_KEY, true));
+        assert_eq!(DEFAULT_KEY, "key.keyboard.comma");
+        // Another key does not, and a release does not.
+        assert!(!toggles_on(DEFAULT_KEY, "key.keyboard.z", true));
+        assert!(!toggles_on(DEFAULT_KEY, DEFAULT_KEY, false));
+    }
+
+    #[test]
+    fn rebound_and_unbound_keys() {
+        // The player bound their own key: it acts, the old default does not.
+        assert!(toggles_on("key.keyboard.g", "key.keyboard.g", true));
+        assert!(!toggles_on("key.keyboard.g", DEFAULT_KEY, true));
+        // Cleared key, or the empty name: nothing acts, even for that name.
+        assert!(!toggles_on(UNBOUND_KEY, UNBOUND_KEY, true));
+        assert!(!toggles_on("", "", true));
     }
 
     #[test]

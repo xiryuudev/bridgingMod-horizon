@@ -5,13 +5,13 @@ Everything the submit form asks for, ready to paste.
 ## File
 
 - Kind: **native mod**
-- File: `bridgingmod-1.0.0.hnmod` (19,324 bytes)
-- SHA-256: `9f11105bb67c8abb7ce3afd128ea0aec0b8478c8042f43bd2bf4e0bfbb6fc888`
+- File: `bridgingmod-1.0.1.hnmod` (19,966 bytes)
+- SHA-256: `3a6b7e5aadcd897fed978f395997b9b83c39900bc7da81f01580ef4b7cdbbece`
 - id: `bridgingmod`
-- Version: `1.0.0`
+- Version: `1.0.1`
 - Minecraft: `26.3`
 - Changelog: see below
-- Download: https://github.com/xiryuudev/bridgingMod-horizon/releases/download/v1.0.0/bridgingmod-1.0.0.hnmod
+- Download: https://github.com/xiryuudev/bridgingMod-horizon/releases/download/v1.0.1/bridgingmod-1.0.1.hnmod
 
 ## Page
 
@@ -33,15 +33,15 @@ Everything the submit form asks for, ready to paste.
 RWTmX3D9C28IymzslPHR9Nv6c6lEYdx7eBxU44E+SyfgdJ0XglLHkppK
 ```
 
-- Signature file: `bridgingmod-1.0.0.hnmod.minisig`
-  https://github.com/xiryuudev/bridgingMod-horizon/releases/download/v1.0.0/bridgingmod-1.0.0.hnmod.minisig
+- Signature file: `bridgingmod-1.0.1.hnmod.minisig`
+  https://github.com/xiryuudev/bridgingMod-horizon/releases/download/v1.0.1/bridgingmod-1.0.1.hnmod.minisig
 
 Verified with:
 
 ```sh
-cargo horizon-mod check bridgingmod-1.0.0.hnmod \
+cargo horizon-mod check bridgingmod-1.0.1.hnmod \
   --key "RWTmX3D9C28IymzslPHR9Nv6c6lEYdx7eBxU44E+SyfgdJ0XglLHkppK" \
-  --signature bridgingmod-1.0.0.hnmod.minisig
+  --signature bridgingmod-1.0.1.hnmod.minisig
 ```
 
 -> `signature verified`
@@ -115,6 +115,21 @@ rebuild of the mod. When that happens the launcher reports the mod as not buildi
 ## Changelog
 
 ```
+1.0.1 - the advertised comma toggle now works
+
+Fixes the default-key defect reported in review: `bridging_key` returned early when the
+resolved key equalled the mod's own default, and `native_mod_key` answers that default
+whenever the player set no override, so on a fresh install (or an explicit comma binding)
+the toggle never ran.
+
+- `runtime.rs`: new `toggles_on(bound, key, pressed)` decides whether the toggle key acts;
+  it accepts the default, rejects only an unbound or empty key, and is unit-tested.
+- `key.rs`: uses `toggles_on`, so the default comma key toggles like a rebound key.
+- Tests: default key toggles, a rebound key toggles and the stale default does not, an
+  unbound key never toggles. Verified in game: a comma press writes
+  `horizon-mods/.horizon-mod-data/bridgingmod/enabled` false -> true with the
+  "Bridging assist: OFF/ON" action-bar message on a fresh profile.
+
 1.0.0 - first release
 
 Port of BridgingMod 2.7.0 (Minecraft 26.3) to a Horizon native mod, pinned to Horizon fdc87ae.

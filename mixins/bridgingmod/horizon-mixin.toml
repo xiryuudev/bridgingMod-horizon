@@ -6,7 +6,7 @@
 # A port of squeeglii's BridgingMod (MIT), rewritten in Rust for Horizon.
 [mod]
 id = "bridgingmod"
-version = "1.0.0"
+version = "1.0.1"
 priority = 100
 
 [compatibility]
