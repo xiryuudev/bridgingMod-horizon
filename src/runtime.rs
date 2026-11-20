@@ -9,21 +9,24 @@
 // and a debug box shows the exact position (F3).
 //
 // This module is the game-free half: the search, the hit it makes and the
-// settings. The helpers (`frame.rs`, `use.rs`, ...) only adapt the game to it.
-// It is compiled into the game as `crate::game::bridgingmod`.
+// settings. `adapter.rs` gives it a `World` backed by the SDK's `ClientHost`,
+// and `lib.rs` wires the SDK hooks to it.
 
 use std::cell::RefCell;
 
 /// The mod's id: its settings folder and its key's line.
-pub const ID: &str = "bridgingmod";
-pub const NAME: &str = "BridgingMod";
-pub const VERSION: &str = "1.0.1";
+pub const ID: &str = "bridgingmod_horizon";
+pub const NAME: &str = "BridgingMod (Horizon)";
+pub const VERSION: &str = "2.0.0";
 pub const DESCRIPTION: &str =
     "Reach-around placement: place blocks in reach-around gaps, with a direction indicator and F3 box.";
 /// The toggle key's name, and its default (upstream's comma).
 pub const KEY: &str = "toggle";
 pub const DEFAULT_KEY: &str = "key.keyboard.comma";
 /// Said in the action bar when the toggle key turns it on or off.
+/// The chevron's tint: opaque white, so the mod's own image shows as drawn.
+pub const INDICATOR_TINT: u32 = 0xFFFF_FFFF;
+
 pub const ON: &str = "Bridging assist: ON";
 pub const OFF: &str = "Bridging assist: OFF";
 
@@ -1076,195 +1079,6 @@ pub fn fraction(y: f64) -> f64 {
     y - y.floor()
 }
 
-// --- The game adapter -------------------------------------------------------
-
-impl crate::game::Game<'_> {
-    /// The camera's position and view vector, as `GameRenderer.pick` uses them.
-    pub(crate) fn bridging_aim(&self) -> Option<([f64; 3], [f64; 3])> {
-        self.aim()
-    }
-    /// The player's eye position.
-    pub(crate) fn bridging_eye(&self) -> Option<[f64; 3]> {
-        self.eye_position()
-    }
-    /// The block pick's reach.
-    pub(crate) fn bridging_reach(&self) -> f64 {
-        self.block_reach
-    }
-    /// The living player's position.
-    pub(crate) fn bridging_player_pos(&self) -> Option<[f64; 3]> {
-        self.player
-            .as_ref()
-            .map(|p| [p.position.x, p.position.y, p.position.z])
-    }
-    /// The player is on the ground.
-    pub(crate) fn bridging_on_ground(&self) -> bool {
-        self.player.as_ref().is_some_and(|p| p.ground.on_ground)
-    }
-    /// Whether the block at `pos` is air.
-    pub(crate) fn bridging_air(&self, pos: Pos) -> bool {
-        self.world.block(pos.x, pos.y, pos.z) == self.world.air
-    }
-    /// Whether the block at `pos` can be replaced (grass, snow, water...).
-    pub(crate) fn bridging_replaceable(&self, pos: Pos) -> bool {
-        let state = self.world.block(pos.x, pos.y, pos.z);
-        self.res.facts().get(state).replaceable
-    }
-    /// Whether the block at `pos` is a liquid.
-    pub(crate) fn bridging_liquid(&self, pos: Pos) -> bool {
-        let state = self.world.block(pos.x, pos.y, pos.z);
-        !matches!(
-            self.res.facts().get(state).fluid,
-            horizon_client::blocks::Fluid::None
-        )
-    }
-    /// The player's bounding box overlaps the block at `pos`.
-    pub(crate) fn bridging_player_overlaps(&self, pos: Pos) -> bool {
-        if self.spectator() {
-            return false;
-        }
-        let Some(p) = self.player.as_ref() else {
-            return false;
-        };
-        let half = f64::from(p.dimensions.width) / 2.0;
-        let min = [
-            p.position.x - half,
-            p.position.y,
-            p.position.z - half,
-        ];
-        let max = [
-            p.position.x + half,
-            p.position.y + f64::from(p.dimensions.height),
-            p.position.z + half,
-        ];
-        let block_min = [f64::from(pos.x), f64::from(pos.y), f64::from(pos.z)];
-        let block_max = [block_min[0] + 1.0, block_min[1] + 1.0, block_min[2] + 1.0];
-        min[0] < block_max[0]
-            && max[0] > block_min[0]
-            && min[1] < block_max[1]
-            && max[1] > block_min[1]
-            && min[2] < block_max[2]
-            && max[2] > block_min[2]
-    }
-    /// The default state of the block the held item places, from a hand.
-    fn bridging_hand_block(
-        &self,
-        stack: Option<&horizon_client::items::ItemStack>,
-    ) -> Option<horizon_world::registry::BlockStateId> {
-        let stack = stack?;
-        self.res.items().get(&stack.item).and_then(|info| info.block)
-    }
-    /// The blocks the two hands place, main hand first.
-    pub(crate) fn bridging_held_blocks(
-        &self,
-    ) -> [Option<horizon_world::registry::BlockStateId>; 2] {
-        [
-            self.bridging_hand_block(self.held()),
-            self.bridging_hand_block(self.offhand.as_ref()),
-        ]
-    }
-    /// The player is crouching.
-    pub(crate) fn bridging_crouching(&self) -> bool {
-        self.keys
-            .held(horizon_client::actions::Action::Sneak)
-    }
-    /// The block at `pos` is a slab, and which half (`Some(true)` = top).
-    pub(crate) fn bridging_slab_half(&self, pos: Pos) -> Option<bool> {
-        let state = self.world.block(pos.x, pos.y, pos.z);
-        if !self.res.facts().get(state).name.ends_with("_slab") {
-            return None;
-        }
-        let registry_state = self.pack.assets.registry.state(state)?;
-        match registry_state.properties.get("type").map(String::as_str) {
-            Some("top") => Some(true),
-            Some("double") => None,
-            _ => Some(false),
-        }
-    }
-    /// The held item places a slab or a trapdoor.
-    pub(crate) fn bridging_holds_slab(&self) -> [bool; 2] {
-        let [main, off] = self.bridging_held_blocks();
-        [main, off].map(|id| {
-            id.is_some_and(|id| self.res.facts().get(id).name.ends_with("_slab"))
-        })
-    }
-    /// The held item places a trapdoor.
-    pub(crate) fn bridging_holds_trapdoor(&self) -> [bool; 2] {
-        let [main, off] = self.bridging_held_blocks();
-        [main, off].map(|id| {
-            id.is_some_and(|id| self.res.facts().get(id).name.ends_with("_trapdoor"))
-        })
-    }
-    /// Whether the block item at `id` is a torch and torch bridging is off.
-    pub(crate) fn bridging_skips_torch(&self, id: Option<horizon_world::registry::BlockStateId>) -> bool {
-        id.is_some_and(|id| {
-            let name = &self.res.facts().get(id).name;
-            name.contains("torch") && self.bridging_config().skip_torch_bridging
-        })
-    }
-    /// The current settings, read once.
-    pub(crate) fn bridging_config(&self) -> Config {
-        let game = self;
-        config(|key| game.native_setting(ID, key))
-    }
-}
-
-/// The game as the search sees it; `hand` is 0 for the main hand, 1 for
-/// the off hand (the slab assist reads the item that would place).
-pub(in crate::game) struct GameWorld<'a, 'g> {
-    game: &'a crate::game::Game<'g>,
-    hand: usize,
-}
-
-impl<'a, 'g> GameWorld<'a, 'g> {
-    pub(in crate::game) fn new(game: &'a crate::game::Game<'g>, hand: usize) -> Self {
-        Self { game, hand }
-    }
-}
-
-impl World for GameWorld<'_, '_> {
-    fn is_air(&self, pos: Pos) -> bool {
-        self.game.bridging_air(pos)
-    }
-    fn is_replaceable(&self, pos: Pos) -> bool {
-        self.game.bridging_replaceable(pos)
-    }
-    fn is_liquid(&self, pos: Pos) -> bool {
-        self.game.bridging_liquid(pos)
-    }
-    fn player_overlaps_block(&self, pos: Pos) -> bool {
-        self.game.bridging_player_overlaps(pos)
-    }
-    fn holding_placeable(&self) -> bool {
-        let [main, off] = self.game.bridging_held_blocks();
-        let usable = |id: Option<horizon_world::registry::BlockStateId>| {
-            id.is_some() && !self.game.bridging_skips_torch(id)
-        };
-        usable(main) || usable(off)
-    }
-    fn crouching(&self) -> bool {
-        self.game.bridging_crouching()
-    }
-}
-
-impl SlabWorld for GameWorld<'_, '_> {
-    fn slab_half(&self, pos: Pos) -> Option<bool> {
-        self.game.bridging_slab_half(pos)
-    }
-    fn holding_slab(&self) -> bool {
-        self.game.bridging_holds_slab()[self.hand]
-    }
-    fn holding_trapdoor(&self) -> bool {
-        self.game.bridging_holds_trapdoor()[self.hand]
-    }
-}
-
-/// Whether an indicator should be drawn for `config` in this state: the mod
-/// is on, and the crouch rule (if any) passes.
-pub fn assist_visible(config: &Config, crouching: bool) -> bool {
-    config.enabled && (!config.only_bridge_when_crouched || crouching)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1400,7 +1214,10 @@ mod tests {
         c.click(0);
         c.click(2);
         assert_eq!(c.enabled, false);
-        assert_eq!(c.supported_axes, AxisMode::Vertical);
+        // The default is `Both`, and `Both.next()` is `Horizontal`. The 1.0.1
+        // bundle asserted `Vertical` here, but that assertion never ran: the
+        // bundle was compiled into the game, where `cfg(test)` never applies.
+        assert_eq!(c.supported_axes, AxisMode::Horizontal);
     }
 
     #[test]

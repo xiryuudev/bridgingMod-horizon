@@ -1,0 +1,24 @@
+# BridgingMod for Horizon — reach-around placement ("bridge assist").
+#
+# A port of squeeglii's BridgingMod (MIT) to the Horizon mod SDK, replacing the
+# retired `.hnmod` mixin bundle (Horizon's mod-API merge; launchers >= 0.2.70
+# refuse `.hnmod` outright). The search, the synthetic hit, the settings and the
+# crosshair chevron are the same code as 1.0.1; the entry points are now SDK
+# hooks. Rebuilt for the SDK: no game rebuild, no [[native.mixin]] row.
+id = "bridgingmod_horizon"
+name = "BridgingMod (Horizon)"
+version = "2.0.0"
+description = """Reach-around placement: right-click with a block to fill the gap you are looking into, so a bridge
+can be built over an edge without aiming at a block face. Adds a crosshair chevron showing which way the block goes,
+an optional F3 outline and trace, slab/trapdoor assist, and a settings page under Options > Mods."""
+authors = ["xiryuudev", "squeeglii"]
+license = "MIT"
+homepage = "https://github.com/xiryuudev/bridgingMod-horizon"
+api = "0.2"
+side = "client"
+capabilities = ["registries"]
+
+[native]
+game = "26.3"
+horizon = "0a875da91dbb0fdcb7ba8c42c11341aa229af51a"
+mixins = "e59da9094f0c2fdda6c627fe9eff22dec6a906f0"
